@@ -1,0 +1,6 @@
+[submodule "xtypes"]
+    path = thirdparty/xtypes
+    url = https://github.com/haodongnj/xtypes
+[submodule "pugixml"]
+    path = thirdparty/pugixml
+    url = https://github.com/zeux/pugixml.git
