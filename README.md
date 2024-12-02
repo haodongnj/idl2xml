@@ -4,6 +4,9 @@
 
 How to build:
 ```bash
+cd idl2xml
+# clone submodules recursively
+git submodule update --init --recursive
 mkdir build && cd build
 cmake .. && make
 ```
