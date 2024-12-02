@@ -1,0 +1,14 @@
+BasedOnStyle: Google
+IndentWidth: 2
+ColumnLimit: 128
+---
+Language: Cpp
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: false
+PackConstructorInitializers: NextLine
+DerivePointerAlignment: false
+PointerAlignment: Left
+BasedOnStyle: Google
+ColumnLimit: 128
