@@ -1,13 +1,189 @@
 #include "dynamic_type_xml.hpp"
 
+#include <cstdint>
 #include <set>
+#include <type_traits>
 
 #include "pugixml.hpp"
+#include "utils.hpp"
+#include "xtypes/EnumerationType.hpp"
+#include "xtypes/TypeKind.hpp"
 #include "xtypes/idl/idl.hpp"
 #include "xtypes/xtypes.hpp"
 
 using namespace eprosima::xtypes;
 namespace idl2xml {
+
+static void update_primitive_member_attributes(pugi::xml_node& member_node, const Member& member) {
+  member_node.append_attribute("name") = member.name();
+  member_node.append_attribute("type") = member.type().name();
+}
+
+static void update_string_member_attributes(pugi::xml_node& member_node, const Member& member) {
+  uint32_t bounds = 0;
+  if (member.type().kind() == TypeKind::STRING_TYPE) {
+    const auto& string_type = static_cast<const StringType&>(member.type());
+    bounds = string_type.bounds();
+  } else if (member.type().kind() == TypeKind::WSTRING_TYPE) {
+    const auto& wstring_type = static_cast<const WStringType&>(member.type());
+    bounds = wstring_type.bounds();
+  } else if (member.type().kind() == TypeKind::STRING16_TYPE) {
+    const auto& string16_type = static_cast<const String16Type&>(member.type());
+    bounds = string16_type.bounds();
+  } else {
+    return;
+  }
+  member_node.append_attribute("name") = member.name();
+  member_node.append_attribute("type") = member.type().name();
+  if (bounds != 0) {
+    member_node.append_attribute("bound") = bounds;
+  } else {
+    // If bounds is 0, it means that no bounds were specified.
+  }
+}
+
+static void update_enumeration_member_attributes(pugi::xml_node& member_node, const Member& member) {
+  member_node.append_attribute("name") = member.name();
+  member_node.append_attribute("type") = "nonBasic";
+  member_node.append_attribute("nonBasicTypeName") = member.type().name();
+}
+
+static void update_alias_member_attributes(pugi::xml_node& member_node, const Member& member) {
+  member_node.append_attribute("name") = member.name();
+  member_node.append_attribute("type") = "nonBasic";
+  member_node.append_attribute("nonBasicTypeName") = member.type().name();
+}
+
+static void update_sequence_member_attributes(pugi::xml_node& member_node, const Member& member) {
+  member_node.append_attribute("name") = member.name();
+  const auto& type = static_cast<const SequenceType&>(member.type());
+  const auto& content_type = type.content_type();
+  if (content_type.is_primitive_type()) {
+    member_node.append_attribute("type") = content_type.name();
+  } else {
+    member_node.append_attribute("type") = "nonBasic";
+    member_node.append_attribute("nonBasicTypeName") = content_type.name();
+  }
+  const auto bounds = type.bounds();
+  if (bounds == 0) {
+    member_node.append_attribute("sequenceMaxLength") = -1;
+  } else {
+    member_node.append_attribute("sequenceMaxLength") = type.bounds();
+  }
+}
+
+static void update_array_member_attributes(pugi::xml_node& member_node, const Member& member) {
+  member_node.append_attribute("name") = member.name();
+  const auto& array_type = static_cast<const ArrayType&>(member.type());
+  std::vector<uint32_t> dims;
+  const DynamicType* p_content_type{nullptr};
+
+  auto get_array_type_info = [&dims, &p_content_type](const ArrayType& array_type) {
+    const ArrayType* current_array_type = &array_type;
+    const DynamicType* current_content_type = &array_type.content_type();
+
+    dims.push_back(current_array_type->dimension());
+
+    auto type_kind_value = current_content_type->kind();
+    while (type_kind_value == TypeKind::ARRAY_TYPE) {
+      current_array_type = &static_cast<const ArrayType&>(*current_content_type);
+      current_content_type = &current_array_type->content_type();
+      dims.push_back(current_array_type->dimension());
+      type_kind_value = current_content_type->kind();
+    }
+    p_content_type = current_content_type;
+  };
+
+  get_array_type_info(array_type);
+
+  if (p_content_type->is_primitive_type()) {
+    member_node.append_attribute("type") = p_content_type->name();
+  } else {
+    // TODO: check if correct
+    member_node.append_attribute("type") = "nonBasic";
+    member_node.append_attribute("nonBasicTypeName") = p_content_type->name();
+  }
+  member_node.append_attribute("arrayDimensions") = join(dims, ",");
+}
+
+static void update_map_member_attributes(pugi::xml_node& member_node, const Member& member) {
+  member_node.append_attribute("name") = member.name();
+  const auto& map_type = static_cast<const MapType&>(member.type());
+  auto bounds = map_type.bounds();
+  const auto& pair_type = static_cast<const PairType&>(map_type.content_type());
+  const auto& key_type = pair_type.first();
+  const auto& value_type = pair_type.second();
+  if (value_type.is_primitive_type()) {
+    member_node.append_attribute("type") = value_type.name();
+  } else {
+    member_node.append_attribute("type") = "nonBasic";
+    member_node.append_attribute("nonBasicTypeName") = value_type.name();
+  }
+  member_node.append_attribute("key_type") = key_type.name();
+  if (bounds == 0) {
+    member_node.append_attribute("mapMaxLength") = -1;
+  } else {
+    member_node.append_attribute("mapMaxLength") = bounds;
+  }
+}
+
+static void update_structure_member_attributes(pugi::xml_node& member_node, const Member& member) {
+  member_node.append_attribute("name") = member.name();
+  // TODO: check if necessary to use nonBasic
+  member_node.append_attribute("type") = "nonBasic";
+  member_node.append_attribute("nonBasicTypeName") = member.type().name();
+}
+
+static void save_member_to_xml_node(pugi::xml_node& member_node, const Member& member) {
+  auto member_kind = member.type().kind();
+  if (static_cast<std::underlying_type<TypeKind>::type>(member_kind & TypeKind::PRIMITIVE_TYPE)) {
+    update_primitive_member_attributes(member_node, member);
+  } else if (member_kind == TypeKind::STRING_TYPE || member_kind == TypeKind::WSTRING_TYPE ||
+             member_kind == TypeKind::STRING16_TYPE) {
+    update_string_member_attributes(member_node, member);
+  } else if (member_kind == TypeKind::ENUMERATION_TYPE) {
+    update_enumeration_member_attributes(member_node, member);
+  } else if (member_kind == TypeKind::ALIAS_TYPE) {
+    update_alias_member_attributes(member_node, member);
+  } else if (member_kind == TypeKind::SEQUENCE_TYPE) {
+    update_sequence_member_attributes(member_node, member);
+  } else if (member_kind == TypeKind::ARRAY_TYPE) {
+    update_array_member_attributes(member_node, member);
+  } else if (member_kind == TypeKind::MAP_TYPE) {
+    update_map_member_attributes(member_node, member);
+  } else if (member_kind == TypeKind::STRUCTURE_TYPE) {
+    update_structure_member_attributes(member_node, member);
+  } else {
+    // nothing to do for other types
+    // UnionType, BitSetType,BitMaskType is not supported yet.
+  }
+}
+
+static void save_enum_to_xml_node(pugi::xml_node& node, const EnumerationType<int32_t>& enum_type) {
+  auto type_definition_node = node.append_child("enum");
+  type_definition_node.append_attribute("name") = enum_type.name();
+  for (const auto& enumerator : enum_type.enumerators()) {
+    auto enumerator_node = type_definition_node.append_child("enumerator");
+    enumerator_node.append_attribute("name") = enumerator.first.c_str();
+    enumerator_node.append_attribute("value") = enumerator.second;
+  }
+}
+
+static void save_struct_to_xml_node(pugi::xml_node& node, const StructType& struct_type) {
+  auto type_definition_node = node.append_child("struct");
+  type_definition_node.append_attribute("name") = struct_type.name();
+  for (const auto member : struct_type.members()) {
+    auto member_node = type_definition_node.append_child("member");
+    save_member_to_xml_node(member_node, member);
+  }
+}
+
+static void save_alias_to_xml_node(pugi::xml_node& node, const AliasType& alias_type) {
+  auto type_definition_node = node.append_child("typedef");
+  type_definition_node.append_attribute("name") = alias_type.name();
+  type_definition_node.append_attribute("type") = "nonBasic";
+  type_definition_node.append_attribute("nonBasicTypeName") = alias_type.rget().name();
+}
 
 static void save_type_to_xml_node(pugi::xml_node& node, std::set<std::string>& saved_types,
                                   const DynamicType::TypeNode& type_node) {
@@ -20,16 +196,22 @@ static void save_type_to_xml_node(pugi::xml_node& node, std::set<std::string>& s
   }
 
   switch (type.kind()) {
-    case TypeKind::STRUCTURE_TYPE:
+    case TypeKind::STRUCTURE_TYPE: {
       const auto& struct_type = static_cast<const StructType&>(type);
-      auto type_node = node.append_child("type");
-      auto type_definition_node = type_node.append_child("struct");
-      type_definition_node.append_attribute("name") = type.name();
-      for (const auto member : struct_type.members()) {
-        auto member_node = type_definition_node.append_child("member");
-        member_node.append_attribute("name") = member.name();
-        member_node.append_attribute("type") = member.type().name();
-      }
+      save_struct_to_xml_node(node, struct_type);
+      break;
+    }
+    case TypeKind::ENUMERATION_TYPE: {
+      const auto& enum_type = static_cast<const EnumerationType<int32_t>&>(type);
+      save_enum_to_xml_node(node, enum_type);
+      break;
+    }
+    case TypeKind::ALIAS_TYPE: {
+      const auto& alias_type = static_cast<const AliasType&>(type);
+      save_alias_to_xml_node(node, alias_type);
+      break;
+    }
+    default:
       break;
   }
 }
