@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <set>
 #include <type_traits>
+#include <unordered_map>
 
 #include "pugixml.hpp"
 #include "utils.hpp"
@@ -14,9 +15,28 @@
 using namespace eprosima::xtypes;
 namespace idl2xml {
 
+static void update_member_type(pugi::xml_node& member_node, const Member& member) {
+  auto& type = member.type();
+  if (type.is_primitive_type()) {
+    const static std::unordered_map<std::string, std::string> typename_map{
+        // octet is represented by uint8 and not handled here
+        {"bool", "boolean"},    {"char", "char8"},      {"wchar_t", "char16"}, {"uint8_t", "uint8"},       {"int8_t", "int8"},
+        {"int16_t", "int16"},   {"uint16_t", "uint16"}, {"int32_t", "int32"},  {"uint32_t", "uint32"},     {"int64_t", "int64"},
+        {"uint64_t", "uint64"}, {"float", "float32"},   {"double", "float64"}, {"long double", "float128"}};
+    if (typename_map.count(type.name())) {
+      member_node.append_attribute("type") = typename_map.at(type.name());
+    } else {
+      member_node.append_attribute("type") = type.name();
+    }
+  } else {
+    member_node.append_attribute("type") = "nonBasic";
+    member_node.append_attribute("nonBasicTypeName") = type.name();
+  }
+}
+
 static void update_primitive_member_attributes(pugi::xml_node& member_node, const Member& member) {
   member_node.append_attribute("name") = member.name();
-  member_node.append_attribute("type") = member.type().name();
+  update_member_type(member_node, member);
 }
 
 static void update_string_member_attributes(pugi::xml_node& member_node, const Member& member) {
@@ -34,7 +54,7 @@ static void update_string_member_attributes(pugi::xml_node& member_node, const M
     return;
   }
   member_node.append_attribute("name") = member.name();
-  member_node.append_attribute("type") = member.type().name();
+  update_member_type(member_node, member);
   if (bounds != 0) {
     member_node.append_attribute("bound") = bounds;
   } else {
@@ -44,26 +64,19 @@ static void update_string_member_attributes(pugi::xml_node& member_node, const M
 
 static void update_enumeration_member_attributes(pugi::xml_node& member_node, const Member& member) {
   member_node.append_attribute("name") = member.name();
-  member_node.append_attribute("type") = "nonBasic";
-  member_node.append_attribute("nonBasicTypeName") = member.type().name();
+  update_member_type(member_node, member);
 }
 
 static void update_alias_member_attributes(pugi::xml_node& member_node, const Member& member) {
   member_node.append_attribute("name") = member.name();
-  member_node.append_attribute("type") = "nonBasic";
-  member_node.append_attribute("nonBasicTypeName") = member.type().name();
+  update_member_type(member_node, member);
 }
 
 static void update_sequence_member_attributes(pugi::xml_node& member_node, const Member& member) {
   member_node.append_attribute("name") = member.name();
   const auto& type = static_cast<const SequenceType&>(member.type());
   const auto& content_type = type.content_type();
-  if (content_type.is_primitive_type()) {
-    member_node.append_attribute("type") = content_type.name();
-  } else {
-    member_node.append_attribute("type") = "nonBasic";
-    member_node.append_attribute("nonBasicTypeName") = content_type.name();
-  }
+  update_member_type(member_node, member);
   const auto bounds = type.bounds();
   if (bounds == 0) {
     member_node.append_attribute("sequenceMaxLength") = -1;
@@ -96,13 +109,7 @@ static void update_array_member_attributes(pugi::xml_node& member_node, const Me
 
   get_array_type_info(array_type);
 
-  if (p_content_type->is_primitive_type()) {
-    member_node.append_attribute("type") = p_content_type->name();
-  } else {
-    // TODO: check if correct
-    member_node.append_attribute("type") = "nonBasic";
-    member_node.append_attribute("nonBasicTypeName") = p_content_type->name();
-  }
+  update_member_type(member_node, member);
   member_node.append_attribute("arrayDimensions") = join(dims, ",");
 }
 
@@ -113,12 +120,8 @@ static void update_map_member_attributes(pugi::xml_node& member_node, const Memb
   const auto& pair_type = static_cast<const PairType&>(map_type.content_type());
   const auto& key_type = pair_type.first();
   const auto& value_type = pair_type.second();
-  if (value_type.is_primitive_type()) {
-    member_node.append_attribute("type") = value_type.name();
-  } else {
-    member_node.append_attribute("type") = "nonBasic";
-    member_node.append_attribute("nonBasicTypeName") = value_type.name();
-  }
+
+  update_member_type(member_node, member);
   member_node.append_attribute("key_type") = key_type.name();
   if (bounds == 0) {
     member_node.append_attribute("mapMaxLength") = -1;
@@ -129,9 +132,7 @@ static void update_map_member_attributes(pugi::xml_node& member_node, const Memb
 
 static void update_structure_member_attributes(pugi::xml_node& member_node, const Member& member) {
   member_node.append_attribute("name") = member.name();
-  // TODO: check if necessary to use nonBasic
-  member_node.append_attribute("type") = "nonBasic";
-  member_node.append_attribute("nonBasicTypeName") = member.type().name();
+  update_member_type(member_node, member);
 }
 
 static void save_member_to_xml_node(pugi::xml_node& member_node, const Member& member) {
