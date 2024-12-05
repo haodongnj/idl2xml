@@ -15,30 +15,40 @@
 using namespace eprosima::xtypes;
 namespace idl2xml {
 
+const static std::unordered_map<std::string, std::string> primitive_typename_map{
+    // octet is represented by uint8 and not handled here
+    {"bool", "boolean"},    {"char", "char8"},      {"wchar_t", "char16"}, {"uint8_t", "uint8"},       {"int8_t", "int8"},
+    {"int16_t", "int16"},   {"uint16_t", "uint16"}, {"int32_t", "int32"},  {"uint32_t", "uint32"},     {"int64_t", "int64"},
+    {"uint64_t", "uint64"}, {"float", "float32"},   {"double", "float64"}, {"long double", "float128"}};
+
+const static std::unordered_map<std::string, std::string> string_typename_map{
+    {"std::string", "string"},
+    {"std::wstring", "wstring"},
+};
+
+static bool is_string_type_kind(const DynamicType& type) {
+  return type.kind() == TypeKind::STRING_TYPE || type.kind() == TypeKind::STRING16_TYPE ||
+         type.kind() == TypeKind::WSTRING_TYPE;
+}
+
+static bool is_basic_type(const DynamicType& type) {
+  return type.is_primitive_type() || is_string_type_kind(type);
+}
+
 static void update_member_type(pugi::xml_node& member_node, const Member& member) {
   auto& type = member.type();
   if (type.is_primitive_type()) {
-    const static std::unordered_map<std::string, std::string> typename_map{
-        // octet is represented by uint8 and not handled here
-        {"bool", "boolean"},    {"char", "char8"},      {"wchar_t", "char16"}, {"uint8_t", "uint8"},       {"int8_t", "int8"},
-        {"int16_t", "int16"},   {"uint16_t", "uint16"}, {"int32_t", "int32"},  {"uint32_t", "uint32"},     {"int64_t", "int64"},
-        {"uint64_t", "uint64"}, {"float", "float32"},   {"double", "float64"}, {"long double", "float128"}};
-    if (typename_map.count(type.name())) {
-      member_node.append_attribute("type") = typename_map.at(type.name());
+    if (primitive_typename_map.count(type.name())) {
+      member_node.append_attribute("type") = primitive_typename_map.at(type.name());
     } else {
       member_node.append_attribute("type") = type.name();
     }
-  } else if (type.kind() == TypeKind::STRING_TYPE || type.kind() == TypeKind::STRING16_TYPE ||
-             type.kind() == TypeKind::WSTRING_TYPE) {
-    const static std::unordered_map<std::string, std::string> typename_map{
-        {"std::string", "string"},
-        {"std::wstring", "wstring"},
-    };
+  } else if (is_string_type_kind(type)) {
     auto type_and_length = split(type.name(), "_");
     assert(type_and_length.size() > 0);
     std::string type_name{type_and_length[0]};
-    if (typename_map.count(type_name)) {
-      member_node.append_attribute("type") = typename_map.at(type_name);
+    if (string_typename_map.count(type_name)) {
+      member_node.append_attribute("type") = string_typename_map.at(type_name);
     } else {
       member_node.append_attribute("type") = type.name();
     }
@@ -196,8 +206,24 @@ static void save_struct_to_xml_node(pugi::xml_node& node, const StructType& stru
 static void save_alias_to_xml_node(pugi::xml_node& node, const AliasType& alias_type) {
   auto type_definition_node = node.append_child("typedef");
   type_definition_node.append_attribute("name") = alias_type.name();
-  type_definition_node.append_attribute("type") = "nonBasic";
-  type_definition_node.append_attribute("nonBasicTypeName") = alias_type.rget().name();
+  const auto& aliased_type = alias_type.get();
+  if (is_basic_type(aliased_type)) {
+    const auto& type_name = aliased_type.name();
+    if (aliased_type.is_primitive_type()) {
+      type_definition_node.append_attribute("type") = primitive_typename_map.at(type_name);
+    } else if (is_string_type_kind(aliased_type)) {
+      auto type_and_length = split(type_name, "_");
+      assert(type_and_length.size() >= 1);
+      std::string actual_typename{type_and_length[0]};
+      assert(string_typename_map.count(actual_typename));
+      type_definition_node.append_attribute("type") = string_typename_map.at(actual_typename);
+    } else {
+      // pass, should not come here
+    }
+  } else {
+    type_definition_node.append_attribute("type") = "nonBasic";
+    type_definition_node.append_attribute("nonBasicTypeName") = aliased_type.name();
+  }
 }
 
 static void save_type_to_xml_node(pugi::xml_node& node, std::set<std::string>& saved_types,
