@@ -13,6 +13,7 @@ add_subdirectory(thirdparty/pugixml)
 
 add_library(dynamic_type_xml SHARED
     src/dynamic_type_xml.cpp
+    src/utils.cpp
     )
 target_link_libraries(dynamic_type_xml PUBLIC Threads::Threads PRIVATE eprosima::xtypes)
 target_link_libraries(dynamic_type_xml PRIVATE pugixml-static)

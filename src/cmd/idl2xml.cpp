@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
     {
       auto type_names = idl2xml::get_typenames_from_idl(sstm.str());
       if (type_names.count(type_name) == 0) {
-        std::cout << "No type named [" << type_name << "] found in parsed IDL file " << idl_file;
+        std::cout << "No type named [" << type_name << "] found in parsed IDL file " << idl_file << std::endl;
       }
     }
     auto xml_content = idl2xml::get_xml_from_idl(sstm.str(), type_name);
