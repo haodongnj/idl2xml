@@ -35,8 +35,7 @@ static bool is_basic_type(const DynamicType& type) {
   return type.is_primitive_type() || is_string_type_kind(type);
 }
 
-static void update_member_type(pugi::xml_node& member_node, const Member& member) {
-  auto& type = member.type();
+static void update_member_type(pugi::xml_node& member_node, const DynamicType& type) {
   if (type.is_primitive_type()) {
     if (primitive_typename_map.count(type.name())) {
       member_node.append_attribute("type") = primitive_typename_map.at(type.name());
@@ -52,6 +51,16 @@ static void update_member_type(pugi::xml_node& member_node, const Member& member
     } else {
       member_node.append_attribute("type") = type.name();
     }
+  } else if (type.kind() == TypeKind::SEQUENCE_TYPE) {
+    auto sequence_type = static_cast<const SequenceType&>(type);
+    const auto& content_type = sequence_type.content_type();
+    update_member_type(member_node, content_type);
+  } else if (type.kind() == TypeKind::ARRAY_TYPE) {
+    const DynamicType* p_content_type = &type;
+    while (p_content_type->kind() == TypeKind::ARRAY_TYPE) {
+      p_content_type = &(static_cast<const ArrayType*>(p_content_type)->content_type());
+    }
+    update_member_type(member_node, *p_content_type);
   } else {
     member_node.append_attribute("type") = "nonBasic";
     member_node.append_attribute("nonBasicTypeName") = type.name();
@@ -60,7 +69,7 @@ static void update_member_type(pugi::xml_node& member_node, const Member& member
 
 static void update_primitive_member_attributes(pugi::xml_node& member_node, const Member& member) {
   member_node.append_attribute("name") = member.name();
-  update_member_type(member_node, member);
+  update_member_type(member_node, member.type());
 }
 
 static void update_string_member_attributes(pugi::xml_node& member_node, const Member& member) {
@@ -78,7 +87,7 @@ static void update_string_member_attributes(pugi::xml_node& member_node, const M
     return;
   }
   member_node.append_attribute("name") = member.name();
-  update_member_type(member_node, member);
+  update_member_type(member_node, member.type());
   if (bounds != 0) {
     member_node.append_attribute("stringMaxLength") = bounds;
   } else {
@@ -88,19 +97,18 @@ static void update_string_member_attributes(pugi::xml_node& member_node, const M
 
 static void update_enumeration_member_attributes(pugi::xml_node& member_node, const Member& member) {
   member_node.append_attribute("name") = member.name();
-  update_member_type(member_node, member);
+  update_member_type(member_node, member.type());
 }
 
 static void update_alias_member_attributes(pugi::xml_node& member_node, const Member& member) {
   member_node.append_attribute("name") = member.name();
-  update_member_type(member_node, member);
+  update_member_type(member_node, member.type());
 }
 
 static void update_sequence_member_attributes(pugi::xml_node& member_node, const Member& member) {
   member_node.append_attribute("name") = member.name();
   const auto& type = static_cast<const SequenceType&>(member.type());
-  const auto& content_type = type.content_type();
-  update_member_type(member_node, member);
+  update_member_type(member_node, member.type());
   const auto bounds = type.bounds();
   if (bounds == 0) {
     member_node.append_attribute("sequenceMaxLength") = -1;
@@ -133,7 +141,7 @@ static void update_array_member_attributes(pugi::xml_node& member_node, const Me
 
   get_array_type_info(array_type);
 
-  update_member_type(member_node, member);
+  update_member_type(member_node, member.type());
   member_node.append_attribute("arrayDimensions") = join(dims, ",");
 }
 
@@ -145,7 +153,7 @@ static void update_map_member_attributes(pugi::xml_node& member_node, const Memb
   const auto& key_type = pair_type.first();
   const auto& value_type = pair_type.second();
 
-  update_member_type(member_node, member);
+  update_member_type(member_node, member.type());
   member_node.append_attribute("key_type") = key_type.name();
   if (bounds == 0) {
     member_node.append_attribute("mapMaxLength") = -1;
@@ -156,7 +164,7 @@ static void update_map_member_attributes(pugi::xml_node& member_node, const Memb
 
 static void update_structure_member_attributes(pugi::xml_node& member_node, const Member& member) {
   member_node.append_attribute("name") = member.name();
-  update_member_type(member_node, member);
+  update_member_type(member_node, member.type());
 }
 
 static void save_member_to_xml_node(pugi::xml_node& member_node, const Member& member) {
