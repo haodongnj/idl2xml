@@ -255,12 +255,15 @@ std::optional<std::string> get_xml_from_idl(const std::string& idl_content, cons
   context.ignore_redefinition = true;
   context.allow_keyword_identifiers = true;
   context = idl::parse(idl_content, context);
-  auto struct_type = context.module().structure(type_name);
-  auto doc = get_xml_from_dynamic_type(struct_type);
-
-  std::stringstream sstm;
-  doc.save(sstm);
-  return sstm.str();
+  auto type = context.module().type(type_name);
+  if (type.get() == nullptr) {
+    return std::nullopt;
+  } else {
+    auto doc = get_xml_from_dynamic_type(*type);
+    std::stringstream sstm;
+    doc.save(sstm);
+    return sstm.str();
+  }
 }
 
 }  // namespace idl2xml
