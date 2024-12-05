@@ -153,8 +153,22 @@ static void update_map_member_attributes(pugi::xml_node& member_node, const Memb
   const auto& key_type = pair_type.first();
   const auto& value_type = pair_type.second();
 
-  update_member_type(member_node, member.type());
-  member_node.append_attribute("key_type") = key_type.name();
+  update_member_type(member_node, value_type);
+
+  if (is_basic_type(key_type)) {
+    if (key_type.is_primitive_type()) {
+      assert(primitive_typename_map.count(key_type.name()));
+      member_node.append_attribute("key_type") = primitive_typename_map.at(key_type.name());
+    } else if (is_string_type_kind(key_type)) {
+      assert(string_typename_map.count(key_type.name()));
+      member_node.append_attribute("key_type") = string_typename_map.at(key_type.name());
+    } else {
+      // pass
+    }
+  } else {
+    member_node.append_attribute("key_type") = key_type.name();
+  }
+
   if (bounds == 0) {
     member_node.append_attribute("mapMaxLength") = -1;
   } else {
