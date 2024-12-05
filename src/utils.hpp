@@ -17,4 +17,7 @@ template <typename T> std::string join(const std::vector<T>& v, const std::strin
   }
   return sstm.str();
 }
+
+std::vector<std::string_view> split(const std::string_view s, const std::string& sep);
+
 }  // namespace idl2xml
