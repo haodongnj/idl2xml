@@ -1,5 +1,7 @@
 # idl2xml
 
+Convert IDL to XML representation according to [Dynamic Types profiles](https://fast-dds.docs.eprosima.com/en/3.1.x/fastdds/xml_configuration/dynamic_types.html).
+
 ## Build
 
 How to build:
