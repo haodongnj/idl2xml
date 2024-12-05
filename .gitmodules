@@ -4,3 +4,6 @@
 [submodule "pugixml"]
     path = thirdparty/pugixml
     url = https://github.com/zeux/pugixml.git
+[submodule "thirdparty/pybind11"]
+	path = thirdparty/pybind11
+	url = https://github.com/pybind/pybind11.git
