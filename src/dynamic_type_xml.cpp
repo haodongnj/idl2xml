@@ -28,6 +28,20 @@ static void update_member_type(pugi::xml_node& member_node, const Member& member
     } else {
       member_node.append_attribute("type") = type.name();
     }
+  } else if (type.kind() == TypeKind::STRING_TYPE || type.kind() == TypeKind::STRING16_TYPE ||
+             type.kind() == TypeKind::WSTRING_TYPE) {
+    const static std::unordered_map<std::string, std::string> typename_map{
+        {"std::string", "string"},
+        {"std::wstring", "wstring"},
+    };
+    auto type_and_length = split(type.name(), "_");
+    assert(type_and_length.size() > 0);
+    std::string type_name{type_and_length[0]};
+    if (typename_map.count(type_name)) {
+      member_node.append_attribute("type") = typename_map.at(type_name);
+    } else {
+      member_node.append_attribute("type") = type.name();
+    }
   } else {
     member_node.append_attribute("type") = "nonBasic";
     member_node.append_attribute("nonBasicTypeName") = type.name();
@@ -56,7 +70,7 @@ static void update_string_member_attributes(pugi::xml_node& member_node, const M
   member_node.append_attribute("name") = member.name();
   update_member_type(member_node, member);
   if (bounds != 0) {
-    member_node.append_attribute("bound") = bounds;
+    member_node.append_attribute("stringMaxLength") = bounds;
   } else {
     // If bounds is 0, it means that no bounds were specified.
   }
