@@ -44,3 +44,15 @@ show
   Positionals:
     idl_file TEXT:FILE          idl file
 ```
+
+## Python bindings
+
+### Build
+
+```bash
+cd idl2xml
+# clone submodules recursively
+git submodule update --init --recursive
+pip3 install -r requirements.txt
+pip3 install . 
+```
